@@ -20,8 +20,17 @@
           </v-card-actions>
         </v-card>
       </v-col>
+      <v-col>
+        <v-card @click ="addCoin">
+          <v-row justify="center">
+            <v-col cols ="5">
+            <v-card-text v-text="'+코인추가'"></v-card-text>
+            </v-col>
+          </v-row>
+        </v-card>
+      </v-col>
     </v-container>
-    <v-dialog v-model="dialog" persistent max-width="400" >
+    <v-dialog v-model="dialog" persistent max-width="400">
       <v-card v-if="selected">
         <v-toolbar dark>
           <v-btn icon dark @click="dialog = false">
@@ -31,34 +40,52 @@
           <v-spacer></v-spacer>
         </v-toolbar>
         <v-col>
-            <div>노기태</div>
-            <div>보유수량 0</div>
-            <div>출금가능 0</div>
-            <div>송금수수료 회원간 송금 면제</div>
-            <div>송금한도 최대 10만원</div>
-            <v-col cols="12">
-                <v-text-field 
-                    label="송금수량"
-                    outlined
-                    v-model="transferAmount"
-                    >
-                </v-text-field>
-            </v-col>
-            <v-btn dark block @click="send()">보내기</v-btn>
+          <div>노기태</div>
+          <div>보유수량 0</div>
+          <div>출금가능 0</div>
+          <div>송금수수료 회원간 송금 면제</div>
+          <div>송금한도 최대 10만원</div>
+          <v-col cols="12">
+            <v-text-field label="송금수량" outlined v-model="transferAmount"></v-text-field>
+          </v-col>
+          <v-btn dark block @click="send()">보내기</v-btn>
         </v-col>
       </v-card>
     </v-dialog>
   </section>
 </template>
 <script>
+import { mapGetters } from "vuex";
+import axios from "axios";
+
 export default {
   name: "Home",
+  computed: {
+    ...mapGetters({ userid: "userid" })
+  },
   data: () => ({
     dialog: false,
     selected: null,
     transferAmount: null,
-    coins: [
-      {
+    coins: []
+  }),
+  methods: {
+    transfer: function(item) {
+      this.selected = item;
+      this.dialog = true;
+      this.transferAmount = null;
+    },
+    send: function() {
+      alert("미구현");
+    },
+    addCoin: function() {
+      alert("미구현");
+    },
+  },
+  created() {
+    // 초기 로딩을 한다
+    axios.get("/api/" + this.userid + "/coin/all").then(res => {
+      /*{
         name: "비트코인",
         symbol: "BTC",
         color: "#1F7087",
@@ -68,19 +95,21 @@ export default {
         name: "이더리움",
         symbol: "ETH",
         color: "#952175",
-        amount: "2.0000"
+        amount: "2.0000"  
       }
-    ]
-  }),
-  methods: {
-    transfer: function(item) {
-      this.selected = item;
-      this.dialog = true;
-      this.transferAmount = null;
-    },
-    send: function() {
-        alert("미구현")
-    }
+    ]*/
+
+      for (const data of res.data.coins) {
+        if (data.symbol === "BTC") {
+          this.coins.push({
+            name: "비트코인",
+            symbol: "BTC",
+            color: "#1F7087",
+            amount: data.amount
+          });
+        }
+      }
+    });
   }
 };
 </script>
