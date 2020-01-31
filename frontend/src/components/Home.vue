@@ -15,16 +15,17 @@
           <v-card-subtitle v-text="item.amount + ' ' + item.symbol"></v-card-subtitle>
           <v-card-actions>
             <v-row justify="end">
+              <v-btn text @click.stop="getCoin(item)">코인받기</v-btn>
               <v-btn text @click.stop="transfer(item)">송금하기</v-btn>
             </v-row>
           </v-card-actions>
         </v-card>
       </v-col>
       <v-col>
-        <v-card @click ="addCoin">
+        <v-card @click="coinlist_dialog = true">
           <v-row justify="center">
-            <v-col cols ="5">
-            <v-card-text v-text="'+코인추가'"></v-card-text>
+            <v-col cols="5">
+              <v-card-text v-text="'+코인추가'"></v-card-text>
             </v-col>
           </v-row>
         </v-card>
@@ -40,15 +41,49 @@
           <v-spacer></v-spacer>
         </v-toolbar>
         <v-col>
-          <div>노기태</div>
-          <div>보유수량 0</div>
-          <div>출금가능 0</div>
-          <div>송금수수료 회원간 송금 면제</div>
-          <div>송금한도 최대 10만원</div>
+          <v-row dense>
+            <v-col>받을분</v-col>
+            <v-col>
+              <v-select dense v-model="target" :items="this.friends" required />
+            </v-col>
+          </v-row>
+          <v-row dense>
+            <v-col>보유수량</v-col>
+            <v-col>{{selected.amount}}</v-col>
+          </v-row>
+          <v-row dense>
+            <v-col>송금수수료</v-col>
+            <v-col>회원간 송금 면제</v-col>
+          </v-row>
+          <v-row dense>
+            <v-col>송금한도</v-col>
+            <v-col>무제한</v-col>
+          </v-row>
           <v-col cols="12">
             <v-text-field label="송금수량" outlined v-model="transferAmount"></v-text-field>
           </v-col>
-          <v-btn dark block @click="send()">보내기</v-btn>
+          <v-btn dark block @click="send(selected, target, transferAmount)">보내기</v-btn>
+        </v-col>
+      </v-card>
+    </v-dialog>
+    <v-dialog v-model="coinlist_dialog" max-width="400">
+      <v-card>
+        <v-toolbar dark>
+          <v-btn icon dark @click="coinlist_dialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+          <v-toolbar-title>코인추가</v-toolbar-title>
+          <v-spacer></v-spacer>
+        </v-toolbar>
+        <v-col v-for="(data, symbol) in symbols" :key="symbol">
+          <v-card
+            v-if="!coins.find((e) => e.symbol === symbol)"
+            :color="data.color"
+            @click="addCoin(symbol)"
+          >
+            <v-card-title v-text="symbol" />
+            <v-card-subtitle v-text="data.name" />
+          </v-card>
         </v-col>
       </v-card>
     </v-dialog>
@@ -65,46 +100,88 @@ export default {
   },
   data: () => ({
     dialog: false,
+    friends: [],
+    friendsToId: {},
+    target: null,
+    coinlist_dialog: false,
     selected: null,
     transferAmount: null,
-    coins: []
+    coins: [],
+    symbols: {
+      BTC: {
+        name: "비트코인",
+        color: "#1F7087"
+      },
+      ETH: {
+        name: "이더리움",
+        color: "#952175"
+      }
+    }
   }),
   methods: {
     transfer: function(item) {
-      this.selected = item;
-      this.dialog = true;
-      this.transferAmount = null;
+      axios.get("/api/" + this.userid + "/friends").then(res => {
+        this.friends = res.data.friends.map(e => e.name);
+        this.friendsToId = {};
+        for(const e of res.data.friends) {
+          this.friendsToId[e.name] = e.id;
+        }
+
+        this.selected = item;
+        this.dialog = true;
+        this.transferAmount = null;
+      });
     },
-    send: function() {
-      alert("미구현");
+    getCoin: function(item) {
+      axios.post("/api/" + this.userid + "/coin/__devget", { symbol: item.symbol}).then(res => {
+        if (res.status === 200) {
+          item.amount = res.data.amount;
+        }
+      });
     },
-    addCoin: function() {
-      alert("미구현");
+    send: function(item, target, amount) {
+      if (Number(item.amount) < (amount)) {
+        alert("입력한 수량이 너무 큽니다");
+      } else {
+        // 타겟을 찾는다
+        const targetID = this.friendsToId[target];
+        axios.post("/api/" + this.userid + "/coin/send", { target: targetID, symbol: item.symbol, amount: amount}).then(res => {
+          if (res.status === 200) {
+            item.amount = res.data.amount;
+            alert("송금이 완료되었습니다");
+            this.dialog = false;
+          }
+        })
+      }
     },
+    addCoin: function(symbol) {
+      axios
+        .post("/api/" + this.userid + "/coin/add", { symbol: symbol })
+        .then(res => {
+          if (res.status === 200 && res.data.success) {
+            const data = this.symbols[res.data.symbol];
+            this.coins.push({
+              symbol: symbol,
+              amount: res.data.amount,
+              name: data.name,
+              color: data.color
+            });
+          }
+
+          this.coinlist_dialog = false;
+        });
+    }
   },
   created() {
     // 초기 로딩을 한다
     axios.get("/api/" + this.userid + "/coin/all").then(res => {
-      /*{
-        name: "비트코인",
-        symbol: "BTC",
-        color: "#1F7087",
-        amount: "1.0000"
-      },
-      {
-        name: "이더리움",
-        symbol: "ETH",
-        color: "#952175",
-        amount: "2.0000"  
-      }
-    ]*/
-
       for (const data of res.data.coins) {
-        if (data.symbol === "BTC") {
+        const symbol_data = this.symbols[data.symbol];
+        if (symbol_data) {
           this.coins.push({
-            name: "비트코인",
-            symbol: "BTC",
-            color: "#1F7087",
+            name: symbol_data.name,
+            symbol: data.symbol,
+            color: symbol_data.color,
             amount: data.amount
           });
         }
