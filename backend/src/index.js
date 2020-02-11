@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const db = new sqlite3.Database(':memory:');
 db.serialize(() => {
-    db  .run(`CREATE TABLE account (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);`)
+    db  .run(`CREATE TABLE account (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT, phone Text);`)
         .run(`CREATE TABLE coin (id INTEGER, symbol TEXT, amount TEXT, address TEXT, PRIMARY KEY(id, symbol));`)
     //;
 });
@@ -15,24 +15,33 @@ const app = express();
 app.use(bodyParser.json())
 
 app.post('/api/login', (req, res)  => {
-    const name = req.body.name;
-    db.get(`SELECT id FROM account WHERE name = ?`, [name], function (err, row)  {
+    const token = req.body.token;
+    console.log('login', token);
+    db.get(`SELECT id FROM account WHERE token = ?`, [token], function (err, row)  {
         if (err) {
             res.status(500).end();
         } else {
             if (row) {
-                res.json({ success: true,  id: row.id });
+                res.json({ success: true,  registered: true, id: row.id });
             } else {
-                db.run(`INSERT INTO account (name) VALUES (?)`, name, function (err) {
-                    if (err) {
-                        res.status(500).end();
-                    } else {
-                        res.json({ success: true,  id: this.lastID });
-                    }
-                });
+                res.json({success: true, registered: false})
             }
         }
     }); 
+});
+
+app.post('/api/register', (req, res) => {
+    const token = req.body.token;
+    const phone = req.body.phone;
+    console.log('register', token, phone);
+    db.run(`INSERT INTO account (token, phone) VALUES (?, ?)`, token, phone, function (err) {
+        if (err) {
+            res.status(500).end();
+        } else {
+            res.json({ success: true,  id: this.lastID });
+        }
+    });
+
 });
 
 app.get('/api/:userid/coin/all', (req, res) => {
@@ -65,6 +74,7 @@ app.post('/api/:userid/coin/add', (req, res) => {
         if (err) {
             res.status(500).end();
         } else {
+            console.log('coin add', symbol, address);
             res.json({
                 success: true,
                 symbol: symbol,
@@ -78,19 +88,22 @@ app.post('/api/:userid/coin/add', (req, res) => {
 app.get('/api/:userid/friends', (req, res) => {
     const id = req.params.userid;
     const result = [];
-    db.each(`SELECT id, name FROM account WHERE id <> ?`, id , function(err, row) {
+    db.each(`SELECT token, phone FROM account WHERE id <> ?`, id , function(err, row) {
         if (err) {
             // 
+            console.log(err);
         } else {
             result.push({
-                id: row.id,
-                name: row.name,
+                id: row.token,
+                phone: row.phone,
             })
         }
     }, function (err, count) {
         if (err) {
+            console.log(err);
             res.status(500).end();
         } else {
+            console.log(result);
             res.json({ friends: result }) 
         }
     });
@@ -128,12 +141,18 @@ app.post('/api/:userid/coin/send', (req, res) => {
     const target = req.body.target;
     const amount = req.body.amount;
 
+    console.log(id, symbol, target, amount);
+
     const response = function() {
         db.get(`SELECT * FROM coin WHERE id = ? AND symbol = ?;`, id, symbol, function(err, row) {
-            res.json({
-                success: true,
-                amount: row.amount
-            });
+            if (err) {
+                res.status(500).end();
+            } else {
+                res.json({
+                    success: true,
+                    amount: row.amount
+                });
+            }
         });
     }
 
@@ -169,6 +188,6 @@ app.post('/api/:userid/coin/send', (req, res) => {
     });
 });
 
-app.listen(8081, () => {
-    console.log('Server listens port 8081');
+app.listen(8088, () => {
+    console.log('Server listens port 8088');
 })
